@@ -1,0 +1,482 @@
+---
+title: "Applied Regression and Multicollinearity"
+subtitle: "Computational Statistics in R"
+author: "Student ID: 112006234"
+date: today
+date-format: "MMMM D, YYYY"
+
+format:
+  pdf:
+    documentclass: article
+    fontsize: 11pt
+    geometry:
+      - top=27mm
+      - bottom=25mm
+      - left=22mm
+      - right=22mm
+    colorlinks: true
+    linkcolor: "steelblue"
+    include-in-header:
+      file: header.tex
+
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+
+knitr:
+  opts_chunk:
+    comment: "#>"
+---
+\honorstatement
+
+\vspace{6pt}
+
+# Q0 · Setup
+```{R}
+# load data
+cars <- read.table(
+  "auto-data.txt",
+  header = FALSE,
+  na.strings = "?",
+  quote = "\""
+)
+
+colnames(cars) <- c(
+  "mpg", "cylinders", "displacement", "horsepower",
+  "weight", "acceleration", "model_year", "origin", "car_name"
+)
+
+# remove rows with missing values
+cars <- na.omit(cars)
+
+# remove car name because it is not used in regression
+cars$car_name <- NULL
+```
+
+# Q1 · Create a new dataset that log-transforms several variables from our original dataset (called cars in this case):
+```{R}
+# create log-transformed dataset
+cars_log <- with(cars, data.frame(
+  log.mpg. = log(mpg),
+  log.cylinders. = log(cylinders),
+  log.displacement. = log(displacement),
+  log.horsepower. = log(horsepower),
+  log.weight. = log(weight),
+  log.acceleration. = log(acceleration),
+  model_year = model_year,
+  origin = origin
+))
+```
+
+### (a) Run a new regression on the cars_log dataset, with mpg.log. dependent on all other variables.
+```{R}
+regr_log <- lm(
+  log.mpg. ~ log.cylinders. + log.displacement. + log.horsepower. +
+    log.weight. + log.acceleration. + model_year + factor(origin),
+  data = cars_log
+)
+
+summary(regr_log)
+```
+
+### (i) Which log-transformed factors have a significant effect on log.mpg. at 10% significance?
+```{R}
+coef_table <- summary(regr_log)$coefficients
+
+# significant variables at 10% level
+coef_table[coef_table[, "Pr(>|t|)"] < 0.10, ]
+```
+\begin{answerbox}
+At the 10 percent significance level, log horsepower, log weight, log acceleration , model year, and factor(origin) are statistically significant predictors of log mpg. The variables log cylinders. and log displacement are not significant at the 10 percent level.
+\end{answerbox}
+At the 10% significance level, the significant factors are the predictors with p-value < 0.10 in the log-transformed regression output. These variables have statistically significant relationships with log(mpg), after controlling for the other predictors in the model.
+
+### (ii) Do some new factors now have effects on mpg, and why might this be?
+```{R}
+# original full regression model, without log transformation
+regr_raw <- lm(
+  mpg ~ cylinders + displacement + horsepower +
+    weight + acceleration + model_year + factor(origin),
+  data = cars
+)
+
+summary(regr_raw)
+summary(regr_log)
+```
+\begin{answerbox}
+Yes. After the log transformation, some new factors now have significant effects on mpg. In the original raw regression, the significant predictors were mainly displacement, weight, model year, and origin. In the log-transformed regression, log horsepower. and log acceleration. also become significant at the 10 percent level. This suggests that horsepower and acceleration affect mpg in a nonlinear or proportional way, so their effects become clearer after taking logs.
+\end{answerbox}
+
+\begin{answerbox}
+This may happen because the raw regression assumes a constant additive effect, while the log regression estimates proportional effects. Since variables such as horsepower and acceleration likely have nonlinear relationships with mpg, the log transformation can reduce curvature and make their effects easier to detect statistically.
+\end{answerbox}
+
+### (iii) Which factors still have insignificant or opposite (from correlation) effects on mpg? Why might this be?
+Look at the p-values in the log regression summary.
+```{R}
+# regression output 
+summary(regr_log)
+```
+\begin{answerbox}
+log cylinders. and log displacement. are still insignificant in the log regression model.
+\end{answerbox}
+
+Compare the signs of the simple correlations with the signs of the regression coefficients above.
+```{R}
+# correlations with mpg in the original data
+round(cor(cars[, c(
+  "mpg", "cylinders", "displacement", "horsepower",
+  "weight", "acceleration", "model_year"
+)], use = "pairwise.complete.obs"), 2)
+
+# correlations with log.mpg. in the log data
+round(cor(cars_log[, c(
+  "log.mpg.", "log.cylinders.", "log.displacement.",
+  "log.horsepower.", "log.weight.",
+  "log.acceleration.", "model_year"
+)], use = "pairwise.complete.obs"), 2)
+```
+\begin{answerbox}
+log.displacement. has a negative simple correlation with log.mpg., but its coefficient in the full regression is positive, so it has an opposite effect from the correlation.
+\end{answerbox}
+
+\begin{answerbox}
+This likely happens because of multicollinearity. Cylinders, displacement, horsepower, and weight are strongly correlated with each other, so the model has difficulty separating their individual effects. A regression coefficient shows the effect of one variable while holding the others constant, not the simple two-variable relationship.
+\end{answerbox}
+
+### (b) Let’s take a closer look at weight, because it seems to be a major explanation of mpg
+### (i) Create a regression (call it regr_wt) of mpg over weight from the original cars dataset
+```{R}
+regr_wt <- lm(mpg ~ weight, data = cars)
+
+summary(regr_wt)
+```
+This model estimates the raw linear relationship between car weight and mpg. The slope should be negative, meaning heavier cars tend to have lower mpg. However, this raw model may not fully satisfy regression assumptions if the relationship is nonlinear.
+
+### (ii) Create a regression (call it regr_wt_log) of log.mpg. on log.weight. from cars_log
+```{R}
+regr_wt_log <- lm(log.mpg. ~ log.weight., data = cars_log)
+
+summary(regr_wt_log)
+```
+This model estimates the relationship between log(weight) and log(mpg). Since both variables are log-transformed, the model measures a proportional relationship instead of a fixed-unit relationship.
+
+### (iii) Visualize the residuals of both regression models (raw and log-transformed):
+1. density plots of residuals
+```{R}
+plot(
+  density(regr_wt$residuals),
+  main = "Residual Density: Raw vs Log Model",
+  xlab = "Residuals",
+  lwd = 2,
+  col = "blue"
+)
+
+lines(
+  density(regr_wt_log$residuals),
+  lwd = 2,
+  col = "darkgreen"
+)
+
+abline(v = mean(regr_wt$residuals), col = "blue", lty = 2)
+abline(v = mean(regr_wt_log$residuals), col = "darkgreen", lty = 2)
+
+legend(
+  "topright",
+  legend = c("Raw model: mpg ~ weight", "Log model: log(mpg) ~ log(weight)"),
+  col = c("blue", "darkgreen"),
+  lwd = 2,
+  lty = 1,
+  bty = "n",
+  cex = 0.6
+)
+```
+
+2. scatterplot of log.weight. vs. residuals
+```{R}
+# raw model residuals
+plot(
+  cars_log$log.weight.,
+  regr_wt$residuals,
+  main = "Raw Model Residuals vs log(weight)",
+  xlab = "log(weight)",
+  ylab = "Residuals",
+  pch = 19,
+  col = "blue"
+)
+abline(h = 0, col = "red", lwd = 2, lty = 2)
+
+# log-log model residuals
+plot(
+  cars_log$log.weight.,
+  regr_wt_log$residuals,
+  main = "Log Model Residuals vs log(weight)",
+  xlab = "log(weight)",
+  ylab = "Residuals",
+  pch = 19,
+  col = "darkgreen"
+)
+abline(h = 0, col = "red", lwd = 2, lty = 2)
+```
+The density plots show whether the residuals are roughly symmetric and centered around zero. The residual scatterplots show whether there is a systematic pattern. A good regression model should have residuals randomly scattered around zero, without a strong curve or funnel shape.
+
+### (iv) Which regression produces better distributed residuals for the assumptions of regression?
+\begin{answerbox}
+The log-log regression produces better distributed residuals for the assumptions of regression. 
+\end{answerbox}
+The log-log regression produces better residuals because the residual scatterplot looks more randomly spread around zero and has less obvious curvature than the raw model. Its residual density also looks more symmetric and centered.
+
+### (v) How would you interpret the slope of log.weight. vs log.mpg. in simple words?
+\begin{answerbox}
+Heavier cars tend to be less fuel efficient.
+\end{answerbox}
+```{R}
+coef_table_log_wt <- summary(regr_wt_log)$coefficients
+
+slope <- coef_table_log_wt["log.weight.", "Estimate"]
+slope
+```
+The slope of log.weight. is -1.0575. Since this is a log-log regression, the slope is interpreted as a percentage relationship. A 1% increase in car weight is associated with about a 1.06% decrease in mpg.
+
+### (vi) From its standard error, what is the 95% confidence interval of the slope of log.weight. vs log.mpg.?
+```{R}
+slope_se <- coef_table_log_wt["log.weight.", "Std. Error"]
+
+lower_ci <- slope - 1.96 * slope_se
+upper_ci <- slope + 1.96 * slope_se
+
+c(lower_ci, upper_ci)
+```
+\begin{answerbox}
+The 95 percent confidence interval for the slope of log.weight. is approximately [-1.116, -0.999]. 
+\end{answerbox}
+
+# Q2 · Let’s tackle multicollinearity next. Consider the regression model:
+### (a) Using regression and $R^2$, compute the VIF of log.weight. using the approach shown in class
+```{R}
+# regress log.weight. on all other independent variables
+weight_vif_regr <- lm(
+  log.weight. ~ log.cylinders. + log.displacement. + log.horsepower. +
+    log.acceleration. + model_year + factor(origin),
+  data = cars_log
+)
+
+# get R-squared from this auxiliary regression
+r2_weight <- summary(weight_vif_regr)$r.squared
+
+# compute VIF
+vif_weight <- 1 / (1 - r2_weight)
+
+r2_weight
+vif_weight
+```
+
+### (b) Let’s try a procedure called Stepwise VIF Selection to remove highly collinear predictors. Start by Installing the ‘car’ package in RStudio -- it has a function called vif()  
+### (i) Use vif(regr_log) to compute VIF of the all the independent variables
+```{R}
+library(car)
+
+# full log model from Q1
+regr_log <- lm(
+  log.mpg. ~ log.cylinders. + log.displacement. + log.horsepower. +
+    log.weight. + log.acceleration. + model_year + factor(origin),
+  data = cars_log
+)
+
+# compute VIF values
+vif(regr_log)
+```
+
+### (ii) Eliminate from your model the single independent variable with the largest VIF score that is also greater than 5
+### (iii) Repeat steps (i) and (ii) until no more independent variables have VIF scores above 5
+```{R}
+# function to get comparable VIF values
+get_vif_values <- function(model) {
+  v <- vif(model)
+
+  if (is.matrix(v)) {
+    vif_compare <- ifelse(
+     # Use ordinary GVIF for Df = 1 terms,
+     # and adjusted GVIF for Df > 1 terms
+
+      v[, "Df"] == 1,
+      v[, "GVIF"],
+      v[, "GVIF^(1/(2*Df))"]
+    )
+    names(vif_compare) <- rownames(v)
+    return(vif_compare)
+  } else {
+    return(v)
+  }
+}
+
+# start from the full model
+current_model <- regr_log
+
+# repeat until all VIF values are <= 5
+repeat {
+  vif_values <- get_vif_values(current_model)
+  print(vif_values)
+  
+  max_vif <- max(vif_values)
+  
+  # stop if no VIF is above 5
+  if (max_vif <= 5) {
+    break
+  }
+  
+  # find variable with largest VIF
+  remove_var <- names(which.max(vif_values))
+  cat("Removing:", remove_var, "with VIF =", max_vif, "\n")
+  
+  # update model by removing that variable
+  new_formula <- update(formula(current_model), paste(". ~ . -", remove_var))
+  current_model <- lm(new_formula, data = cars_log)
+}
+
+# final model after stepwise VIF selection
+final_model <- current_model
+```
+For predictors with Df = 1, the GVIF column is the same as the usual VIF, so I compare the GVIF column to the threshold of 5. For multi-degree-of-freedom terms such as factor(origin), I use GVIF^(1/(2*Df)) as the comparable value.
+
+### (iv) Report the final regression model and its summary statistics
+```{R}
+# final model formula
+formula(final_model)
+
+# final model summary
+summary(final_model)
+
+# final VIF values
+get_vif_values(final_model)
+```
+
+### (c) Using stepwise VIF selection, have we lost any variables that were previously significant? If so, how much did we hurt our explanation by dropping those variables? (hint: look at model fit)
+```{R}
+# significant variables in the original full log model at 10%
+full_sig <- summary(regr_log)$coefficients
+full_sig[full_sig[, "Pr(>|t|)"] < 0.10, ]
+
+# significant variables in the final VIF-selected model at 10%
+final_sig <- summary(final_model)$coefficients
+final_sig[final_sig[, "Pr(>|t|)"] < 0.10, ]
+
+# compare model fit before and after VIF selection
+full_r2 <- summary(regr_log)$r.squared
+final_r2 <- summary(final_model)$r.squared
+
+full_adj_r2 <- summary(regr_log)$adj.r.squared
+final_adj_r2 <- summary(final_model)$adj.r.squared
+
+model_fit_compare <- data.frame(
+  Model = c("Full log model", "Final VIF-selected model"),
+  R_squared = c(full_r2, final_r2),
+  Adjusted_R_squared = c(full_adj_r2, final_adj_r2)
+)
+
+model_fit_compare
+```
+\begin{answerbox}
+Using stepwise VIF selection, we did lose a variable that was previously significant.
+\end{answerbox}
+Using stepwise VIF selection, we did lose a variable that was previously significant. The removed variables were log.displacement., log.horsepower., and log.cylinders.. Among these, log.horsepower. was previously significant in the full log model, with p-value = 1.32e-06. This means that stepwise VIF selection removed one predictor that was statistically significant in the full log model.
+
+Also, log.acceleration. was significant in the original full log model, with p-value = 0.00469, but in the final VIF-selected model it was no longer significant, with p-value = 0.14389. It was not dropped from the model, but its effect became weaker after the highly collinear variables were removed.
+
+To see how much this hurt the model, we compare model fit. The full log model had R-squared = 0.8919100 and adjusted R-squared = 0.8896522. The final VIF-selected model had R-squared = 0.8844856 and adjusted R-squared = 0.8829893. The adjusted R-squared decreased by:   
+0.8896522 - 0.8829893    
+= 0.0066629   
+
+So the explanatory power decreased by only about 0.0067, or 0.67 percentage points. This is a small drop. 
+\begin{answerbox}
+Therefore, even though we removed one previously significant variable, the final model still explains the data almost as well while having much lower multicollinearity. 
+\end{answerbox}
+
+This suggests that log.horsepower. contained useful information, but much of that information overlapped with the remaining predictors, especially log.weight.
+
+
+### (d) From only the formula for VIF, try deducing/deriving the following:
+### (i) If an independent variable has no correlation with other independent variables, what would its VIF score be? 
+```{R}
+R2_no_correlation <- 0
+
+VIF_no_correlation <- 1 / (1 - R2_no_correlation)
+
+VIF_no_correlation
+```
+If an independent variable has no correlation with the other independent variables, then the R-squared from regressing it on the other predictors is 0.
+
+Using the VIF formula:
+VIF = 1 / (1 - $R^2$)   
+If $R^2$ = 0:   
+VIF = 1 / (1 - 0) = 1
+\begin{answerbox}
+the VIF score would be 1.
+\end{answerbox}
+This is the minimum possible VIF and means there is no multicollinearity.   
+
+### (ii) Given a regression with only two independent variables (X1 and X2), how correlated would X1 and X2 have to be, to get VIF scores of 5 or higher? To get VIF scores of 10 or higher?
+```{R}
+# For VIF = 5
+r_for_vif_5 <- sqrt(1 - 1/5)
+
+# For VIF = 10
+r_for_vif_10 <- sqrt(1 - 1/10)
+
+r_for_vif_5
+r_for_vif_10
+```
+\begin{answerbox}
+To get a VIF of 5 or higher, the two independent variables need an absolute correlation of at least about 0.894. To get a VIF of 10 or higher, they need an absolute correlation of at least about 0.949. 
+\end{answerbox}
+This means the predictors must be extremely strongly correlated to create such high VIF values.
+
+# Q3 · Might the relationship of weight on mpg be different for cars from different origins? Let’s try visualizing this. First, plot all the weights, using different colors and symbols for the three origins:
+
+### (a) Let’s add three separate regression lines on the scatterplot, one for each of the origins. Here’s one for the US to get you started:
+```{R}
+origin_colors <- c("blue", "darkgreen", "red")
+
+with(
+  cars_log,
+  plot(
+    log.weight.,
+    log.mpg.,
+    pch = origin,
+    col = origin_colors[origin],
+    xlab = "log(weight)",
+    ylab = "log(mpg)",
+    main = "log(weight) vs log(mpg) by Origin"
+  )
+)
+
+legend(
+  "topright",
+  legend = c("USA", "Europe", "Japan"),
+  col = origin_colors,
+  pch = 1:3,
+  bty = "n",
+  cex = 0.8
+)
+
+# separate datasets by origin
+cars_us <- subset(cars_log, origin == 1)
+cars_eu <- subset(cars_log, origin == 2)
+cars_jp <- subset(cars_log, origin == 3)
+
+# separate regressions for each origin
+wt_regr_us <- lm(log.mpg. ~ log.weight., data = cars_us)
+wt_regr_eu <- lm(log.mpg. ~ log.weight., data = cars_eu)
+wt_regr_jp <- lm(log.mpg. ~ log.weight., data = cars_jp)
+
+# add regression lines
+abline(wt_regr_us, col = origin_colors[1], lwd = 2)
+abline(wt_regr_eu, col = origin_colors[2], lwd = 2)
+abline(wt_regr_jp, col = origin_colors[3], lwd = 2)
+```
+### (b) Do cars from different origins appear to have different weight vs. mpg relationships?
+Yes, cars from different origins appear to have somewhat different weight vs. mpg relationships. All three groups show a negative relationship, meaning heavier cars tend to have lower mpg. However, the regression lines do not perfectly overlap, so origin seems to affect the relationship between weight and mpg.
+
+The main pattern is that cars from different origins may have different intercepts and possibly different slopes. This means that cars from one origin may have higher or lower expected mpg than cars from another origin at the same weight, and the strength of the weight effect may also differ slightly.

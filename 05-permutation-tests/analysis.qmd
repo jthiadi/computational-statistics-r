@@ -1,0 +1,388 @@
+---
+title: "Permutation Tests for Two Groups"
+subtitle: "Computational Statistics in R"
+author: "Student ID: 112006234"
+date: today
+date-format: "MMMM D, YYYY"
+
+format:
+  pdf:
+    documentclass: article
+    fontsize: 11pt
+    geometry:
+      - top=27mm
+      - bottom=25mm
+      - left=22mm
+      - right=22mm
+    colorlinks: true
+    linkcolor: "steelblue"
+    include-in-header:
+      file: header.tex
+
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+
+knitr:
+  opts_chunk:
+    comment: "#>"
+---
+
+\honorstatement
+
+\vspace{6pt}
+
+# Q1 · Reshape the Verizon dataset to a “long” data frame.
+
+### (a) Pick a reshaping package and reason why.
+\begin{answerbox}
+tidyr.
+\end{answerbox}
+The answer is based on the information in https://tidyr.tidyverse.org/articles/tidy-data.html, and on pivot_longer() function in the website https://tidyr.tidyverse.org/reference/pivot_longer.html, which is an updated approach to gather().       
+
+**I chose tidyr for 2 main reasons:**
+\begin{answerbox}
+(1) Data structure:
+\end{answerbox}
+The next questions used:  
+· t.test()  
+· permutation tests  
+· Wilcoxon test  
+which assume long format:  
+group | value
+
+pivot_longer() directly produces this structure in a clean and predictable way, reducing risk of mistakes.
+
+\begin{answerbox}
+(2) Data semantics:
+\end{answerbox}
+
+tidyr is built around the tidy data standard:  
+· each variable → a column  
+· each observation → a row  
+· each type of observational unit → a table  
+
+This is exactly what we need:  
+· customer_type → variable  
+· response_time → variable  
+
+So the reshaping step is not just formatting, it’s making the data compatible with statistical inference workflows.
+
+### (b) Show the code to reshape the verizon_wide.csv sample.
+```{R}
+library(tidyr)
+
+verizon_wide <- read.csv("verizon_wide.csv")
+
+verizon_long <- verizon_wide |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "customer_type",
+    values_to = "response_time",
+    values_drop_na = TRUE
+  )
+```
+
+### (c) Show the “head” and “tail” of the data to demonstrate that the reshaping worked.
+```{R}
+head(verizon_long)
+tail(verizon_long)
+```
+
+### (d) Visualize Verizon’s response times for ILEC vs. CLEC customers.
+```{R}
+# box plot
+boxplot(response_time ~ customer_type,
+        data = verizon_long,
+        main = "Verizon Response Times: ILEC vs CLEC",
+        xlab = "Customer Type",
+        ylab = "Response Time")
+
+# density plot
+ilec <- verizon_long$response_time[verizon_long$customer_type == "ILEC"]
+clec <- verizon_long$response_time[verizon_long$customer_type == "CLEC"]
+
+plot(density(ilec),
+     main = "Density of Verizon Response Times",
+     xlab = "Response Time",
+     lwd = 2)
+lines(density(clec), lwd = 2, lty = "dashed")
+legend("topright",
+       legend = c("ILEC", "CLEC"),
+       lty = c(1, 2),
+       lwd = 2)
+```
+
+# Q2 · Test if the mean of response times for CLEC customers is greater than for ILEC customers.
+
+### (a) State the appropriate null and alternative hypotheses (one-tailed).
+\begin{answerbox}
+Null hypothesis: $$H_0: \mu_{CLEC} \le \mu_{ILEC}$$  
+Alternative hypothesis: $$H_A: \mu_{CLEC} > \mu_{ILEC}$$  
+\end{answerbox}
+
+### (b) Use the  t.test() function to test the difference between the mean of ILEC versus CLEC response times at 1% significance, show the results and whether the null hypothesis is rejected.
+
+## (i) Conduct the test assuming variances of the two populations are equal.
+```{R}
+ilec <- verizon_long$response_time[verizon_long$customer_type == "ILEC"]
+clec <- verizon_long$response_time[verizon_long$customer_type == "CLEC"]
+
+tt_equal <- t.test(clec, ilec,
+                   alternative = "greater",
+                   var.equal = TRUE, conf.level = 0.99)
+
+tt_equal
+
+if (tt_equal$p.value < 0.01) {
+  cat("null hypothesis rejected.\n")
+} else {
+  cat("do not reject null hypothesis.\n")
+}
+```
+
+\begin{answerbox}
+Reject the null hypothesis.
+\end{answerbox}
+
+## (ii) Conduct the test assuming variances of the two populations are not equal.
+```{R}
+tt_unequal <- t.test(clec, ilec,
+                     alternative = "greater",
+                     var.equal = FALSE, conf.level = 0.99)
+
+tt_unequal
+
+if (tt_unequal$p.value < 0.01) {
+  cat("null hypothesis rejected.\n")
+} else {
+  cat("do not reject null hypothesis.\n")
+}
+```
+
+\begin{answerbox}
+Do not reject the null hypothesis.
+\end{answerbox}
+
+### (c) Implement a permutation test, as we saw in class, to compare the means of ILEC vs. CLEC times.
+
+## (i) Visualize the distribution of permuted differences, and indicate the observed difference as well.
+```{R}
+set.seed(6767)
+
+# observed difference
+obs_diff <- mean(clec) - mean(ilec)
+
+# combine all values
+all_times <- c(clec, ilec)
+n_clec <- length(clec)
+n_ilec <- length(ilec)
+
+perm_diff_means <- function(all_values, n_group1) {
+  permuted <- sample(all_values, length(all_values), replace = FALSE)
+  group1 <- permuted[1:n_group1]
+  group2 <- permuted[(n_group1 + 1):length(permuted)]
+  mean(group1) - mean(group2)
+}
+
+n_perm <- 5000
+perm_diffs <- replicate(n_perm, perm_diff_means(all_times, n_clec))
+
+# plot
+plot(density(perm_diffs),
+     main = "Permutation Distribution of Mean Differences",
+     xlab = "Permuted mean(CLEC) - mean(ILEC)",
+     lwd = 2)
+abline(v = obs_diff, col = "red", lwd = 2)
+
+hist(perm_diffs,
+     breaks = 50,
+     main = "Permutation Distribution with Observed Statistic",
+     xlab = "Permuted mean(CLEC) - mean(ILEC)",
+     col = "lightgray")
+
+# observed statistic (solid line)
+abline(v = obs_diff, col = "red", lwd = 2)
+
+# two-tailed bounds (dashed lines)
+abline(v = c(-abs(obs_diff), abs(obs_diff)),
+       col = "blue",
+       lwd = 2,
+       lty = "dashed")
+```
+
+\begin{answerbox}
+The red vertical line represents the observed difference in means (CLEC − ILEC).
+\end{answerbox}
+The histogram shows the permutation distribution along with the observed difference (solid red line) and the symmetric two-tailed bounds (dashed blue lines).
+
+From the plot, we can see that there are essentially no permuted values beyond the negative bound (−|obs_diff|). This means that all extreme values lie on the positive side of the distribution.
+
+As a result, the two-tailed p-value is equal to the one-tailed p-value, since only one tail contributes to the probability AND no extreme values appear in the opposite tail. 
+
+## (ii) What are the one-tailed and two-tailed p-values of the permutation test?
+```{R}
+p_one_tailed <- mean(perm_diffs >= obs_diff)
+p_two_tailed <- mean(abs(perm_diffs) >= abs(obs_diff))
+
+p_one_tailed
+p_two_tailed
+```
+
+## (iii) Would you reject the null hypothesis at 1% significance in a one-tailed test?
+\begin{answerbox}
+No.
+\end{answerbox}
+
+```{R}
+if (p_one_tailed < 0.01) {
+  cat("reject.\n")
+} else {
+  cat("do not reject.\n")
+}
+```
+
+# Q3 · Use the Wilcoxon test to see if the response times for CLEC are different than ILEC.
+
+### (a) Compute the W statistic comparing the values using either the permutation approach (try the functional form) or the rank sum approach.
+```{R}
+W <- 0 # initialize W
+
+# loop through every CLEC value (group A)
+for (c in clec) {
+  
+  # compare against every ILEC value (group B)
+  for (i in ilec) {
+     # if CLEC response time is greater, add 1
+    if (c > i) {
+      W <- W + 1
+    # if values are equal, add 0.5
+    } else if (c == i) {
+      W <- W + 0.5
+    }
+  }
+}
+
+W
+```
+
+### (b) Compute the one-tailed p-value for W.
+```{R}
+set.seed(6767)
+
+# combine both groups
+all_times <- c(clec, ilec)
+
+# number of CLEC observations (used to split after permutation)
+n_clec <- length(clec)
+
+# Function to compute Wilcoxon W statistic
+calc_W <- function(group1, group2) {
+  sum(outer(group1, group2, ">")) +   # count cases where group1 > group2
+    0.5 * sum(outer(group1, group2, "=="))  # add 0.5 for ties
+}
+
+# compute observed W statistic using original grouping
+obs_W <- calc_W(clec, ilec)
+
+# generate null distribution of W by permuting labels
+perm_W <- replicate(5000, {
+  
+  # randomly shuffle all observations (break group labels)
+  permuted <- sample(all_times, length(all_times), replace = FALSE)
+  
+  # assign first part as "fake CLEC", rest as "fake ILEC"
+  group1 <- permuted[1:n_clec]
+  group2 <- permuted[(n_clec + 1):length(permuted)]
+  
+  # compute W for this permutation
+  calc_W(group1, group2)
+})
+
+# proportion of permuted W values >= observed W (since alternative is CLEC > ILEC)
+p_W_one_tailed <- mean(perm_W >= obs_W)
+
+p_W_one_tailed
+```
+
+### (c) Run the Wilcoxon Test again using the wilcox.test() function in R and show the results (get the same W as part [a]).
+```{R}
+wilcox_res <- wilcox.test(clec, ilec,
+                          alternative = "greater",
+                          exact = FALSE)
+
+wilcox_res
+```
+
+\begin{answerbox}
+26820 = 26820 (same W as part [a]).
+\end{answerbox}
+
+### (d) At 1% significance, and one-tailed, would you reject the null hypothesis that the values of CLEC and ILEC are similar?
+\begin{answerbox}
+Yes.
+\end{answerbox}
+
+```{R}
+if (p_W_one_tailed < 0.01) {
+  cat("reject.\n")
+} else {
+  cat("do not reject.\n")
+}
+```
+
+# Q4 · Explore way of visualizing whether a sample of data is normally distributed.
+
+### (a) Make a function called norm_qq_plot().
+```{R}
+norm_qq_plot <- function(values) {
+  probs1000 <- seq(0, 1, 0.001) # (i)
+  q_vals <- quantile(values, probs = probs1000) # (ii)
+  q_norm <- qnorm(probs1000, mean = mean(values), sd = sd(values)) # (iii)
+  
+  #(iv)
+  plot(q_norm, q_vals,
+       xlab = "normal quantiles",
+       ylab = "values quantiles")
+  # (v)
+  abline(a = 0, b = 1, col = "red", lwd = 2)
+}
+```
+
+### (b) Confirm that your function works by running it against the values of our d123 distribution from week 3. Interpret the plot you produced and if it suggests whether d123 is normally distributed or not.
+```{R}
+set.seed(978234)
+d1 <- rnorm(n = 500, mean = 15, sd = 5)
+d2 <- rnorm(n = 200, mean = 30, sd = 5)
+d3 <- rnorm(n = 100, mean = 45, sd = 5)
+d123 <- c(d1, d2, d3)
+
+plot(density(d123))
+norm_qq_plot(d123)
+```
+
+\begin{answerbox}
+The distribution of d123 is not normally distributed.
+\end{answerbox}
+
+The Q-Q plot shows that the points do not lie along the reference line, but instead follow a clear curved pattern. This indicates that the data does not follow a normal distribution.
+
+Specifically, the plot has systematic deviations across both the middle and the tails, rather than small random fluctuations. Such curvature suggests that the distribution differs in shape from a normal distribution, potentially due to skewness or differences in tail behavior.
+
+Also, the density plot reveals multiple peaks, indicating that the data is likely a mixture of several distributions rather than a single normal distribution. This explains the strong deviations observed in the Q-Q plot.
+
+### (c) Use normal Q-Q plot function, norm_qq_plot, to check if the values from each of the CLEC and ILEC samples compared in question 2 could be normally distributed, and write conclusion?
+```{R}
+norm_qq_plot(clec)
+norm_qq_plot(ilec)
+```
+
+\begin{answerbox}
+neither the ILEC nor CLEC response times are normally distributed.
+\end{answerbox}
+
+The Q-Q plots for both ILEC and CLEC show strong deviations from the reference line, indicating that neither distribution is approximately normal. The points exhibit clear curvature rather than aligning linearly, which suggests that the data does not follow a normal distribution.
+
+Both plots display a heavy right tail, where large values deviate significantly above the line, indicating right-skewness and the presence of extreme values. Additionally, there is clustering of points at lower values, suggesting that the data is not symmetrically distributed.

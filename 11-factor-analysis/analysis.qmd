@@ -1,0 +1,540 @@
+---
+title: "Factor Analysis of Security Attitudes"
+subtitle: "Computational Statistics in R"
+author: "Student ID: 112006234"
+date: today
+date-format: "MMMM D, YYYY"
+
+format:
+  pdf:
+    documentclass: article
+    fontsize: 11pt
+    geometry:
+      - top=27mm
+      - bottom=25mm
+      - left=22mm
+      - right=22mm
+    colorlinks: true
+    linkcolor: "steelblue"
+    include-in-header:
+      file: header.tex
+
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+
+knitr:
+  opts_chunk:
+    comment: "#>"
+---
+\honorstatement
+
+\vspace{6pt}
+
+# Q0 · Setup
+```{R}
+library(readxl)
+library(ggplot2)
+library(psych)
+
+file_name <- "security_questions.xlsx"
+
+security <- read_excel(file_name, sheet = "data")
+security <- as.data.frame(security)
+
+# make sure all Q columns are numeric
+security[] <- lapply(security, as.numeric)
+
+# remove rows with missing values, if any
+security <- na.omit(security)
+
+# question wording sheet
+questions <- read_excel(file_name, sheet = "questions", col_names = FALSE)
+questions <- as.data.frame(questions)
+
+colnames(questions) <- c("Item", "Question")
+```
+
+# Q1 · Perform a parallel analysis
+### (a) Show a single visualization with:
+### (i) scree plot of original data’s eigen decomposition
+### (ii) scree plot of simulated noise (from 1000 noise samples) as:
+1. ribbon of 90% CI of noise eigenvalues
+2. two lines for mean and 95th percentile of noise eigenvalues
+3. a horizontal line showing the eigenvalue = 1 cutoff.
+
+```{R}
+library(readxl)
+library(ggplot2)
+
+# load data
+security <- read_excel("security_questions.xlsx", sheet = "data")
+security <- as.data.frame(security)
+
+# make sure all items are numeric
+security[] <- lapply(security, as.numeric)
+
+# remove rows with missing values
+security <- na.omit(security)
+
+# original data eigenvalues
+original_eigen <- eigen(cor(security))$values
+
+# function to simulate random noise eigenvalues
+sim_noise_ev <- function(n, p) {
+  noise <- data.frame(replicate(p, rnorm(n)))
+  eigen(cor(noise))$values
+}
+
+set.seed(42)
+
+# 1000 simulated noise samples
+noise_eigen <- replicate(
+  1000,
+  sim_noise_ev(n = nrow(security), p = ncol(security))
+)
+
+# summarize noise eigenvalues
+parallel_df <- data.frame(
+  component = 1:ncol(security),
+  original = original_eigen,
+  noise_mean = apply(noise_eigen, 1, mean),
+  noise_05 = apply(noise_eigen, 1, quantile, probs = 0.05),
+  noise_95 = apply(noise_eigen, 1, quantile, probs = 0.95)
+)
+
+# visualization
+ggplot(parallel_df, aes(x = component)) +
+  geom_ribbon(aes(ymin = noise_05, ymax = noise_95), alpha = 0.25) +
+  geom_line(aes(y = original, linetype = "Original data"), linewidth = 1) +
+  geom_point(aes(y = original), size = 2) +
+  geom_line(aes(y = noise_mean, linetype = "Noise mean"), linewidth = 1) +
+  geom_line(aes(y = noise_95, linetype = "Noise 95th percentile"), linewidth = 1) +
+  geom_hline(yintercept = 1, linetype = "dotted", linewidth = 1) +
+  scale_x_continuous(breaks = 1:ncol(security)) +
+  labs(
+    title = "Parallel Analysis of Security Questionnaire",
+    x = "Component",
+    y = "Eigenvalue",
+    linetype = "Line"
+  ) +
+  theme_minimal()
+```
+\begin{answerbox}
+The visualization compares the original eigenvalues with simulated-noise eigenvalues from 1000 random datasets.
+\end{answerbox}
+The original data line drops sharply after the first component, while the simulated-noise mean and 95th percentile lines provide reference values for what eigenvalues could look like by chance. The horizontal eigenvalue = 1 line also shows the traditional Kaiser cutoff.
+
+### (b) How many dimensions would you retain if we used Parallel Analysis?
+```{R}
+# retain components whose original eigenvalues are larger than noise mean
+retain_mean <- sum(parallel_df$original > parallel_df$noise_mean)
+
+# stricter rule: retain components whose original eigenvalues are larger than noise 95th percentile
+retain_95 <- sum(parallel_df$original > parallel_df$noise_95)
+
+retain_mean
+retain_95
+```
+\begin{answerbox}
+Using Parallel Analysis, I would retain 2 dimensions.
+\end{answerbox}
+Both the noise-mean rule and the stricter 95th-percentile rule give 2 retained components in my output. This means only the first two original eigenvalues are clearly larger than what we would expect from random noise.
+
+# Q2 · Treat the underlying dimensions of the security dataset as factors and examine factor loadings, using the principal() method from the psych package
+
+### (a) Looking at the loadings of the first 3 principal components, to which components does each item seem to best belong?
+```{R}
+# extract 3 unrotated principal components
+pc3 <- principal(
+  r = security,
+  nfactors = 3,
+  rotate = "none",
+  scores = TRUE
+)
+
+# print loading table
+print(pc3, cut = 0.30, sort = FALSE)
+
+# convert loadings to data frame
+pc_loadings <- as.data.frame(unclass(pc3$loadings[, 1:3]))
+
+# find component with largest absolute loading for each item
+abs_pc_loadings <- abs(pc_loadings)
+
+item_best_pc <- data.frame(
+  Item = rownames(pc_loadings),
+  pc_loadings,
+  Best_Component = colnames(abs_pc_loadings)[max.col(abs_pc_loadings)],
+  Best_Loading = apply(pc_loadings, 1, function(x) x[which.max(abs(x))])
+)
+
+item_best_pc
+```
+\begin{answerbox}
+Most items best belong to PC1, while Q4, Q12, and Q17 best belong to PC2.
+\end{answerbox}
+I assigned each item to the component where it had the largest absolute loading. Based on this rule, most items best belong to PC1, while Q4, Q12, and Q17 best belong to PC2. No item best belongs to PC3. This suggests that the unrotated first PC acts like a broad general security component, so the unrotated solution is not very easy to interpret item-by-item.
+
+### (b) How much of the total variance of the security dataset do the first 3 PCs capture?
+```{R}
+# variance explained by each PC
+pc3$Vaccounted
+
+# cleaner table
+variance_pc3 <- data.frame(
+  Component = colnames(pc_loadings),
+  SS_Loadings = pc3$Vaccounted["SS loadings", 1:3],
+  Proportion_Variance = pc3$Vaccounted["Proportion Var", 1:3],
+  Cumulative_Variance = pc3$Vaccounted["Cumulative Var", 1:3]
+)
+
+variance_pc3
+
+# direct answer for total variance captured by first 3 PCs
+total_variance_pc3 <- pc3$Vaccounted["Cumulative Var", 3]
+total_variance_pc3
+```
+\begin{answerbox}
+The first 3 PCs capture 66.98 percent of the total variance.
+\end{answerbox}
+PC1 captures about 51.73%, PC2 captures about 8.87%, and PC3 captures about 6.39%. Together, their cumulative variance is 0.6698, meaning the first three components explain about two-thirds of the security dataset’s total variance.
+
+### (c) Looking at commonality and uniqueness, which items are less than adequately explained by the first 3 principal components?
+```{R}
+# add commonality and uniqueness to item table
+item_explanation <- data.frame(
+  Item = rownames(pc_loadings),
+  h2 = pc3$communality,
+  u2 = pc3$uniquenesses
+)
+
+item_explanation
+
+# items with low commonality
+less_explained_items <- subset(item_explanation, h2 < 0.50)
+
+less_explained_items
+```
+\begin{answerbox}
+Using h2 < 0.50 as the cutoff, Q2 is the only item less than adequately explained by the first 3 PCs.
+\end{answerbox}
+Q2 has commonality h2 = 0.4605 and uniqueness u2 = 0.5395, meaning less than half of its variance is explained by the three-component solution. All other items have commonality above 0.50.
+
+### (d) How many measurement items share similar loadings between 2 or more components?
+```{R}
+# Full unrotated loading matrix
+pc_loadings <- as.data.frame(unclass(pc3$loadings[, 1:3]))
+
+# Absolute loadings because we care about loading strength
+abs_pc_loadings <- abs(pc_loadings)
+
+# Find strongest and second strongest loading for each item
+loading_similarity <- data.frame(
+  Item = rownames(pc_loadings),
+  PC1 = pc_loadings$PC1,
+  PC2 = pc_loadings$PC2,
+  PC3 = pc_loadings$PC3,
+  Strongest_Abs_Loading = apply(abs_pc_loadings, 1, max),
+  Second_Abs_Loading = apply(abs_pc_loadings, 1, function(x) sort(x, decreasing = TRUE)[2])
+)
+
+# Difference between strongest and second strongest loading
+loading_similarity$Difference <- 
+  loading_similarity$Strongest_Abs_Loading - loading_similarity$Second_Abs_Loading
+
+similar_loading_items <- subset(
+  loading_similarity,
+  Second_Abs_Loading >= 0.30 & Difference <= 0.20
+)
+
+similar_loading_items
+nrow(similar_loading_items)
+
+strict_similar_loading_items <- subset(
+  loading_similarity,
+  Second_Abs_Loading >= 0.70
+)
+
+strict_similar_loading_items
+nrow(strict_similar_loading_items)
+```
+
+\begin{answerbox}
+There are 5 items that share similar loadings between 2 or more components: Q4, Q5, Q10, Q12, and Q17.
+\end{answerbox}
+Using my exploratory rule, 5 items have similar loadings across two components: Q4, Q5, Q10, Q12, and Q17. However, according to the slide standard that $λ > 0.70$ is a strong loading, none of these items have strong loadings on two or more components. Therefore, the answer depends on whether we mean “similar moderate loadings” or “similar strong loadings.”
+
+### (e) Can you interpret a ‘meaning’ behind the first principal component from the items that load best upon it? (see the wording of the questions of those items)
+```{R}
+# items sorted by strength of PC1 loading
+pc1_interpretation <- data.frame(
+  Item = rownames(pc_loadings),
+  PC1_Loading = pc_loadings$PC1,
+  Abs_PC1_Loading = abs(pc_loadings$PC1)
+)
+
+pc1_interpretation <- merge(
+  pc1_interpretation,
+  questions,
+  by = "Item",
+  all.x = TRUE
+)
+
+pc1_interpretation <- pc1_interpretation[
+  order(pc1_interpretation$Abs_PC1_Loading, decreasing = TRUE),
+]
+
+library(knitr)
+
+pc1_interpretation$Question_wrapped <- sapply(
+  pc1_interpretation$Question,
+  function(x) paste(strwrap(x, width = 50), collapse = "<br>")
+)
+
+kable(
+  pc1_interpretation[, c("Item", "PC1_Loading", "Question")],
+  col.names = c("Item", "PC1 Loading", "Question")
+)
+```
+\begin{answerbox}
+The first principal component seems to represent a general sense of website security, privacy, and trustworthiness.
+\end{answerbox}
+The strongest PC1 items involve confidentiality, accuracy, identity verification, protection of personal information, restricted communication, and secure transactions. Since many different security-related items load strongly on PC1, it appears to capture an overall perceived security factor rather than one narrow security feature.
+
+# Q3 · To improve interpretability of loadings, rotate principal component axes using the varimax technique to get rotated components (RCs; extract and rotate only three principal components)
+### (a) Does each RC explain the same or different amount of individual variance than the original PCs?
+```{R}
+# original 3 unrotated PCs
+pc3 <- principal(
+  r = security,
+  nfactors = 3,
+  rotate = "none",
+  scores = TRUE
+)
+
+# 3 varimax rotated components
+rc3 <- principal(
+  r = security,
+  nfactors = 3,
+  rotate = "varimax",
+  scores = TRUE
+)
+
+# compare variance explained
+variance_compare_3 <- data.frame(
+  Component = c("1", "2", "3"),
+  PC_SS_Loadings = pc3$Vaccounted["SS loadings", 1:3],
+  PC_Proportion = pc3$Vaccounted["Proportion Var", 1:3],
+  RC_SS_Loadings = rc3$Vaccounted["SS loadings", 1:3],
+  RC_Proportion = rc3$Vaccounted["Proportion Var", 1:3]
+)
+
+variance_compare_3
+```
+\begin{answerbox}
+Each rotated component explains a different amount of individual variance than the original PCs.
+\end{answerbox}
+Before rotation, PC1 explains much more variance than PC2 and PC3. After varimax rotation, the variance is redistributed more evenly across RC1, RC2, and RC3, with proportions of about 31.18%, 19.39%, and 16.41%.
+
+### (b) Do the three RCs explain the same or different amount of cumulative variance as the three PCs ?
+```{R}
+pc3_total_variance <- pc3$Vaccounted["Cumulative Var", 3]
+rc3_total_variance <- rc3$Vaccounted["Cumulative Var", 3]
+
+pc3_total_variance
+rc3_total_variance
+
+# check if they are practically the same
+round(pc3_total_variance, 4) == round(rc3_total_variance, 4)
+```
+\begin{answerbox}
+The three RCs explain the same cumulative variance as the three original PCs: 66.98 percent.
+\end{answerbox}
+Rotation changes how variance is distributed across the components, but it does not change the total variance explained by the full set of extracted components. Both the unrotated and rotated three-component solutions have cumulative variance 0.6698.
+
+### (c) Looking back at the items that shared similar loadings with multiple principal components (#2d), do those items have more clearly differentiated loadings among rotated components?
+```{R}
+# unrotated loadings
+pc_loadings <- as.data.frame(unclass(pc3$loadings[, 1:3]))
+abs_pc_loadings <- abs(pc_loadings)
+
+# find items with similar loadings in unrotated PCs
+loading_similarity_pc <- data.frame(
+  Item = rownames(pc_loadings),
+  pc_loadings,
+  Strongest_PC = apply(abs_pc_loadings, 1, max),
+  Second_PC = apply(abs_pc_loadings, 1, function(x) sort(x, decreasing = TRUE)[2])
+)
+
+loading_similarity_pc$Difference_PC <- 
+  loading_similarity_pc$Strongest_PC - loading_similarity_pc$Second_PC
+
+similar_loading_items_pc <- subset(
+  loading_similarity_pc,
+  Second_PC >= 0.30 & Difference_PC <= 0.20
+)
+
+similar_loading_items_pc
+
+rc_loadings_only <- as.data.frame.matrix(unclass(rc3$loadings[, 1:3]))
+rc_loadings_only$Item <- rownames(rc_loadings_only)
+
+rotated_cross_items <- rc_loadings_only[
+  rc_loadings_only$Item %in% similar_loading_items_pc$Item,
+]
+
+rotated_cross_items
+```
+\begin{answerbox}
+Yes, the items that had similar loadings across multiple PCs become more clearly differentiated after varimax rotation.
+\end{answerbox}
+In the unrotated solution, Q4, Q5, Q10, Q12, and Q17 had close loadings on more than one component. After rotation, these items load more strongly on one rotated component, making their component membership easier to interpret.
+
+### (d) Can you now more easily interpret the “meaning” of the 3 rotated components from the items that load best upon each of them? (see the wording of the questions of those items)
+```{R}
+# Rotated 3-component solution
+rc3 <- principal(
+  r = security,
+  nfactors = 3,
+  rotate = "varimax",
+  scores = TRUE
+)
+
+# Extract rotated loadings safely
+rc_loadings <- as.data.frame.matrix(unclass(rc3$loadings[, 1:3]))
+
+# Force item names back into the table
+rc_loadings$Item <- rownames(rc_loadings)
+
+# Put Item first
+rc_loadings <- rc_loadings[, c("Item", "RC1", "RC2", "RC3")]
+
+# Absolute loadings only for comparison
+abs_rc_loadings <- abs(rc_loadings[, c("RC1", "RC2", "RC3")])
+
+# Find best rotated component for each item
+item_best_rc <- data.frame(
+  Item = rc_loadings$Item,
+  rc_loadings[, c("RC1", "RC2", "RC3")],
+  Best_RC = colnames(abs_rc_loadings)[max.col(abs_rc_loadings)],
+  Best_Loading = apply(rc_loadings[, c("RC1", "RC2", "RC3")], 1, function(x) {
+    x[which.max(abs(x))]
+  })
+)
+
+# Add question wording
+item_best_rc_questions <- merge(
+  item_best_rc,
+  questions,
+  by = "Item",
+  all.x = TRUE
+)
+
+# Sort by component and loading strength
+item_best_rc_questions <- item_best_rc_questions[
+  order(item_best_rc_questions$Best_RC, -abs(item_best_rc_questions$Best_Loading)),
+]
+
+library(knitr)
+
+item_best_rc_questions$Question_wrapped <- sapply(
+  item_best_rc_questions$Question,
+  function(x) paste(strwrap(x, width = 50), collapse = "<br>")
+)
+
+kable(
+  item_best_rc_questions[, c("Item", "Best_RC", "Best_Loading", "Question")],
+  col.names = c("Item", "Best RC", "Best Loading", "Question")
+)
+```
+\begin{answerbox}
+Yes, the 3 rotated components are easier to interpret: RC1 represents general privacy/security protection, RC2 represents transaction integrity/non-repudiation, and RC3 represents authenticity/identity verification.
+\end{answerbox}
+RC1 contains many items about personal information, confidentiality, secure communication, accuracy, and protection from unauthorized access. RC2 is mainly formed by Q17, Q12, and Q4, which focus on evidence, denial, and making sure information is not deleted. RC3 is mainly formed by Q5, Q10, Q8, and Q15, which focus on communicating with the real site and verifying identity.
+
+### (e) If we reduced the number of extracted and rotated components to 2, does the meaning of our rotated components change?
+```{R}
+# Extract and rotate only 2 components
+rc2 <- principal(
+  r = security,
+  nfactors = 2,
+  rotate = "varimax",
+  scores = TRUE
+)
+
+print(rc2, cut = 0.30, sort = FALSE)
+
+# Extract 2-component rotated loadings safely
+rc2_loadings <- as.data.frame.matrix(unclass(rc2$loadings[, 1:2]))
+
+# Force item names back
+rc2_loadings$Item <- rownames(rc2_loadings)
+
+# Put Item first
+rc2_loadings <- rc2_loadings[, c("Item", "RC1", "RC2")]
+
+# Absolute loadings only for comparison
+abs_rc2_loadings <- abs(rc2_loadings[, c("RC1", "RC2")])
+
+# Best RC for each item
+item_best_rc2 <- data.frame(
+  Item = rc2_loadings$Item,
+  rc2_loadings[, c("RC1", "RC2")],
+  Best_RC = colnames(abs_rc2_loadings)[max.col(abs_rc2_loadings)],
+  Best_Loading = apply(rc2_loadings[, c("RC1", "RC2")], 1, function(x) {
+    x[which.max(abs(x))]
+  })
+)
+
+# Add question wording
+item_best_rc2_questions <- merge(
+  item_best_rc2,
+  questions,
+  by = "Item",
+  all.x = TRUE
+)
+
+item_best_rc2_questions <- item_best_rc2_questions[
+  order(item_best_rc2_questions$Best_RC, -abs(item_best_rc2_questions$Best_Loading)),
+]
+
+item_best_rc2_questions$Question_wrapped <- sapply(
+  item_best_rc2_questions$Question,
+  function(x) paste(strwrap(x, width = 50), collapse = "<br>")
+)
+
+kable(
+  item_best_rc2_questions[, c("Item", "Best_RC", "Best_Loading", "Question")],
+  col.names = c("Item", "Best RC", "Best Loading", "Question")
+)
+```
+\begin{answerbox}
+Yes, the meaning changes when the solution is reduced from 3 rotated components to 2 rotated components.
+\end{answerbox}
+With only 2 rotated components, the items that formed RC3 in the 3-component solution mostly merge into RC1, so the authenticity/identity-verification meaning becomes less separate.
+
+### (f) (ungraded) Looking back at all our results and analyses of this dataset (from this week and previous), how many components (1-3) do you believe we should extract and analyze to understand the security dataset? Feel free to suggest different answers for different purposes.
+
+```{R}
+# Eigenvalues of the correlation matrix
+eigen_values <- eigen(cor(security))$values
+
+# Cumulative variance for 1, 2, and 3 components
+decision_summary <- data.frame(
+  Solution = c("1 component", "2 components", "3 components"),
+  Cumulative_Variance = c(
+    sum(eigen_values[1]) / length(eigen_values),
+    sum(eigen_values[1:2]) / length(eigen_values),
+    sum(eigen_values[1:3]) / length(eigen_values)
+  )
+)
+
+decision_summary
+```
+\begin{answerbox}
+I would retain 2 components for conservative/statistical dimension reduction, but I would examine 3 components for interpretation. 
+\end{answerbox}
+Parallel Analysis supports 2 components because only the first two original eigenvalues are clearly above the simulated noise reference. However, the 3-component rotated solution explains more total variance, about 66.98%, and gives a cleaner interpretation of the questionnaire structure. Therefore, if the goal is strict dimension reduction, I would choose 2 components; if the goal is understanding the theoretical meanings behind the security items, I would also discuss the 3-component solution.

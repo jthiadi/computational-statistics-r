@@ -1,0 +1,20 @@
+# Lecture slides stay on this machine only
+LECTURE/
+
+# R / Quarto clutter
+.Rhistory
+.RData
+.Rproj.user/
+**/.Rhistory
+**/.vdoc.*
+**/*_files/
+.quarto/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Large optional files not required to rerun the committed scripts
+06-item-similarity/best_books_ever.csv
+06-item-similarity/description_embeddings.rds

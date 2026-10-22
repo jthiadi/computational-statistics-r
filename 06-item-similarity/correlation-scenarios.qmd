@@ -1,0 +1,57 @@
+---
+title: "Correlation Scenarios"
+subtitle: "Computational Statistics in R"
+author: "Student ID: 112006234"
+date: today
+date-format: "MMMM D, YYYY"
+
+format:
+  pdf:
+    documentclass: article
+    fontsize: 11pt
+    geometry:
+      - top=27mm
+      - bottom=25mm
+      - left=22mm
+      - right=22mm
+    colorlinks: true
+    linkcolor: "steelblue"
+    include-in-header:
+      file: correlation-header.tex
+
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+
+knitr:
+  opts_chunk:
+    comment: "#>"
+---
+\begin{center}
+\small\color{textmid} 112006202 helped in discussing for narrow and flat dist. of 2(a)
+\end{center}
+
+\honorstatement
+
+\vspace{6pt}
+# Q1 · Make an automated recommendation system for the PicCollage mobile app.
+### (c) Scenario C: Create a diagonal set of random points trending upwards at 45 degrees.
+```{R}
+#pts_C <- interactive_regression()
+#saveRDS(pts_C, "pts_C.rds")
+pts_C <- readRDS("pts_C.rds")
+
+plot(pts_C$x, pts_C$y, pch = 19,
+     main = "Scenario C: Positive trend",
+     xlab = "x", ylab = "y")
+
+abline(lm(pts_C$y ~ pts_C$x), col = "purple")
+
+cor(pts_C)
+summary(lm(pts_C$y ~ pts_C$x))
+```
+### (i) What raw slope of x and y would you generally expect?
+\begin{answerbox}
+\end{answerbox}

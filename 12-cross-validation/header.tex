@@ -1,0 +1,60 @@
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{titling}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+\tcbuselibrary{skins,breakable}
+
+% Purple color palette
+\definecolor{accent}{HTML}{6B3FA0}
+\definecolor{accentlight}{HTML}{EFE6F7}
+\definecolor{accentmid}{HTML}{A87FCC}
+\definecolor{softgray}{HTML}{F5F5F7}
+\definecolor{bordergray}{HTML}{D0C4E0}
+\definecolor{textdark}{HTML}{2C2040}
+\definecolor{textmid}{HTML}{6A5A7A}
+
+% Header / footer
+\setlength{\headheight}{20pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\colorbox{accent}{\color{white}\small\bfseries\quad Cross-Validation\quad}}
+\fancyhead[R]{\small\color{textmid}Computational Statistics in R}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[L]{\small\color{textmid}National Tsing Hua University}
+\fancyfoot[C]{\small\color{textmid}\thepage}
+\fancyfoot[R]{\small\color{textmid}Portfolio}
+\renewcommand{\footrulewidth}{0.4pt}
+
+% Tighten the title block vertical spacing
+\setlength{\droptitle}{-3em}
+\pretitle{\begin{center}\color{textdark}\LARGE\bfseries}
+\posttitle{\end{center}\vspace{-8pt}}
+\preauthor{\begin{center}\small\color{textmid}}
+\postauthor{\end{center}\vspace{-6pt}}
+\predate{\begin{center}\small\color{textmid}}
+\postdate{\end{center}\vspace{-4pt}}
+
+% Section headings
+\titleformat{\section}
+  {\color{accent}\large\bfseries}{}{0em}{}
+  [\vspace{1pt}\color{accentmid}\rule{\linewidth}{0.8pt}\vspace{2pt}]
+\titleformat{\subsection}
+  {\color{textdark}\normalsize\bfseries}{}{0em}{}
+
+\setlist[itemize]{itemsep=2pt,topsep=4pt}
+
+% Answer box 
+\newenvironment{answerbox}{%
+  \begin{tcolorbox}[enhanced,colback=accentlight,colframe=accent,%
+    arc=3pt,boxrule=0.8pt,left=8pt,right=8pt,top=6pt,bottom=6pt,breakable]%
+}{\end{tcolorbox}}
+
+% Honor statement
+\newcommand{\honorstatement}{%
+  \begin{tcolorbox}[enhanced,colback=softgray,colframe=bordergray,%
+    arc=3pt,boxrule=0.6pt,left=8pt,right=8pt,top=5pt,bottom=5pt]
+  \small\color{textmid}\itshape
+  I have completed most of the work by myself, but I used AI tools to help with debugging, understanding some concepts, and checking for typos.
+  \end{tcolorbox}}

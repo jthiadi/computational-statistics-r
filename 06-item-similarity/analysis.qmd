@@ -1,0 +1,159 @@
+---
+title: "Item Similarity and Recommendations"
+subtitle: "Computational Statistics in R"
+author: "Student ID: 112006234"
+date: today
+date-format: "MMMM D, YYYY"
+
+format:
+  pdf:
+    documentclass: article
+    fontsize: 11pt
+    geometry:
+      - top=27mm
+      - bottom=25mm
+      - left=22mm
+      - right=22mm
+    colorlinks: true
+    linkcolor: "steelblue"
+    include-in-header:
+      file: header.tex
+
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+
+knitr:
+  opts_chunk:
+    comment: "#>"
+---
+\begin{center}
+\small\color{textmid} 112006211 helped in discussing for qualitative assessment of 2(e)
+\end{center}
+
+\honorstatement
+
+\vspace{6pt}
+# Q1 · Make an automated recommendation system for the PicCollage mobile app.
+
+### (a) Explore to see if any sticker bundles seem intuitively similar:
+### (i) Take a look at PicCollage's style and content of various bundles in their Sticker Store.
+\begin{answerbox}
+I used the Android version of PicCollage, which did not show recommendation lists for bundles.
+\end{answerbox}
+However, I could still explored the PicCollage sticker store and observed that bundles are grouped by themes such as holidays, emotions, and aesthetics. Similar bundles tend to share visual style and purpose.
+
+### (ii) Find a single sticker bundle, then use intuition to recommend five other bundles in dataset.
+\begin{answerbox}
+I chose the bundle “happycny2016”. Based on its theme, I predict the following bundles to be similar: newyearsparty, ChineseNewYear2013, cny2017, holidaycheers, and jollyholiday.
+\end{answerbox}
+These bundles are similar because they all relate to holiday and festive celebrations, especially events like New Year. They are likely used in similar contexts such as creating greeting cards, decorations, or celebratory collages.
+
+### (b) Find similar bundles using geometric models of similarity:
+### (i) Create cosine-similarity based recommendations for a given bundle
+### 1. Create a cosine_sim(a, b) function that returns the cosine similarity of two vectors.
+```{R}
+# load the PicCollage bundle data
+ac_bundles <- read.csv("piccollage_accounts_bundles.csv", header = TRUE)
+
+# remove the first column (account_id) and keep only bundle usage counts
+items_matrix <- as.matrix(ac_bundles[, -1])
+
+# cosine similarity between two vectors
+cosine_sim <- function(a, b) {
+  sum(a * b) / (sqrt(sum(a^2)) * sqrt(sum(b^2)))
+}
+```
+\begin{answerbox}
+The cosine similarity between two vectors is the dot product divided by the product of their magnitudes. A higher value means the two bundles have more similar usage patterns across accounts.
+\end{answerbox}
+
+### 2. Create a cosine_recos(items_matrix, item_name) function that takes a matrix of items and the name of a specific item you are interested in, and returns five (5) recommendations for that item based on cosine similarity.
+```{R}
+# return the top 5 most similar bundles to item_name
+cosine_recos <- function(items_matrix, item_name) {
+  # extract the column vector of the chosen bundle
+  item_vector <- items_matrix[, item_name]
+  
+  # compute cosine similarity between the chosen bundle and every bundle
+  sims <- apply(items_matrix, 2, function(x) cosine_sim(x, item_vector))
+  
+  # remove the bundle itself from the recommendation list
+  sims <- sims[names(sims) != item_name]
+  
+  # sort from highest similarity to lowest
+  sims <- sort(sims, decreasing = TRUE)
+  
+  # return the top 5 bundle names
+  top_names <- names(sims)[1:5]
+  return(top_names)
+}
+```
+
+### 3. Top 5 cosine recommendations for happycny2016
+```{R}
+chosen_bundle <- "happycny2016"
+
+cosine_top5 <- cosine_recos(items_matrix, chosen_bundle)
+cosine_top5
+```
+
+### (ii) Create correlation based recommendations:
+```{R}
+# mean-center each bundle column
+bundle_means <- apply(items_matrix, 2, mean)
+
+# repeat the bundle means for each row
+bundle_means_matrix <- t(replicate(nrow(items_matrix), bundle_means))
+
+# column-mean-centered matrix
+items_matrix_mc_col <- items_matrix - bundle_means_matrix
+
+# reuse the same recommendation function
+cor_top5 <- cosine_recos(items_matrix_mc_col, chosen_bundle)
+cor_top5
+``` 
+
+### (iii) Create an adjusted-cosine based recommendations.
+```{R}
+# mean-center each account row
+account_means <- apply(items_matrix, 1, mean)
+
+# repeat the account means for each column
+account_means_matrix <- matrix(account_means,
+                               nrow = nrow(items_matrix),
+                               ncol = ncol(items_matrix),
+                               byrow = FALSE)
+
+# row-mean-centered matrix
+items_matrix_mc_row <- items_matrix - account_means_matrix
+
+# reuse the same recommendation function
+adjcos_top5 <- cosine_recos(items_matrix_mc_row, chosen_bundle)
+adjcos_top5
+```
+
+### (c) What is the conceptual difference in cosine similarity, correlation, and adjusted cosine?
+
+### (d) Apply the same cosine similarity idea to a very different dataset: the meaning of book descriptions as encoded in LLM embeddings.
+### (i) Pick a book that you are either familiar with or has an interesting description. Load the file description_embeddings.rds and use your cosine_sim() and cosine_recos() functions earlier to find the top 5 most similar books to a book of your choice.
+
+### (ii) Do the recommendations make sense? Why does cosine similarity “know” about similarity of book descriptions, without being told anything about plot or genre?.
+
+# Q2 · Explore correlation further.
+
+### (a) Scenario A: Create a horizontal set of random points, with a relatively narrow but flat distribution.
+### (i) What raw slope of x and y would you generally expect?
+
+
+### (ii) What is the correlation of x and y that you would generally expect?
+
+
+
+
+```{R}
+```
+\begin{answerbox}
+\end{answerbox}
